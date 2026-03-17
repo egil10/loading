@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Loading Lab</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;700;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body {
+      width: 100%; height: 100%;
+      background: #000;
+      overflow: hidden;
+      cursor: none;
+    }
+
+    /* ── Custom cursor ── */
+    #cursor {
+      position: fixed;
+      top: 0; left: 0;
+      width: 10px; height: 10px;
+      background: #fff;
+      border-radius: 50%;
+      pointer-events: none;
+      transform: translate(-50%, -50%);
+      z-index: 9999;
+      mix-blend-mode: difference;
+      transition: width .15s, height .15s;
+    }
+
+    /* ── Pages ── */
+    .page {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .75s cubic-bezier(.4,0,.2,1);
+    }
+    .page.active {
+      opacity: 1;
+      pointer-events: all;
+    }
+    .page canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* ── Nav ── */
+    #nav {
+      position: fixed;
+      bottom: 2.2rem;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      gap: .4rem;
+      background: rgba(6,6,6,.8);
+      backdrop-filter: blur(24px) saturate(160%);
+      -webkit-backdrop-filter: blur(24px) saturate(160%);
+      border: 1px solid rgba(255,255,255,.07);
+      border-radius: 4rem;
+      padding: .45rem .65rem;
+      z-index: 1000;
+    }
+    .nb {
+      width: 2.1rem; height: 2.1rem;
+      display: flex; align-items: center; justify-content: center;
+      border: 1px solid rgba(255,255,255,.12);
+      border-radius: 50%;
+      background: transparent;
+      color: rgba(255,255,255,.3);
+      font-size: .6rem;
+      font-weight: 700;
+      font-family: 'Space Mono', monospace;
+      cursor: pointer;
+      transition: all .22s ease;
+    }
+    .nb:hover:not(.on) {
+      background: rgba(255,255,255,.07);
+      color: rgba(255,255,255,.65);
+      border-color: rgba(255,255,255,.25);
+    }
+    .nb.on {
+      background: #fff;
+      color: #000;
+      border-color: #fff;
+    }
+    #nav-sep { width: 1px; height: 1.4rem; background: rgba(255,255,255,.08); margin: 0 .15rem; }
+    #nav-name {
+      font-family: 'Space Mono', monospace;
+      font-size: .58rem;
+      color: rgba(255,255,255,.28);
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      padding-left: .4rem;
+      padding-right: .2rem;
+      min-width: 10ch;
+    }
+
+    /* ── P0 : GRAVITY ── */
+    #p0 { background: #030303; }
+
+    /* ── P1 : AURORA ── */
+    #p1 { background: #06040f; }
+    #p1-ui {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      pointer-events: none;
+    }
+    #p1-ui h1 {
+      font-family: 'Inter', sans-serif;
+      font-weight: 200;
+      font-size: clamp(3.5rem, 9vw, 8rem);
+      color: rgba(255,255,255,.88);
+      letter-spacing: -.04em;
+      line-height: 1;
+    }
+    #p1-pct {
+      font-family: 'Space Mono', monospace;
+      font-size: .8rem;
+      color: rgba(255,255,255,.28);
+      letter-spacing: .28em;
+      margin-top: 1.4rem;
+    }
+
+    /* ── P2 : TERMINAL ── */
+    #p2 { background: #010c01; }
+
+    /* ── P3 : NEURAL ── */
+    #p3 { background: #020510; }
+
+    /* ── P4 : KINETIC ── */
+    #p4 {
+      background: #f0ebe3;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    #p4::before {
+      content: '';
+      position: absolute; inset: 0;
+      background-image:
+        repeating-linear-gradient(0deg,
+          transparent,
+          transparent calc(12.5% - 1px),
+          rgba(0,0,0,.04) calc(12.5% - 1px),
+          rgba(0,0,0,.04) 12.5%
+        );
+      pointer-events: none;
+    }
+    #kin-word {
+      display: flex;
+      align-items: center;
+      font-family: 'Inter', sans-serif;
+      font-weight: 900;
+      font-size: clamp(5rem, 15vw, 14rem);
+      letter-spacing: -.05em;
+      color: #0d0d0d;
+      user-select: none;
+      position: relative; z-index: 1;
+    }
+    #kin-word span { display: inline-block; will-change: transform, color, filter; transform-origin: bottom center; }
+    #kin-hint {
+      position: absolute; bottom: 33%;
+      font-family: 'Space Mono', monospace;
+      font-size: .68rem;
+      color: rgba(0,0,0,.2);
+      letter-spacing: .28em;
+      text-transform: uppercase;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+
+<div id="cursor"></div>
+
+<nav id="nav">
+  <button class="nb on"  data-p="0">01</button>
+  <button class="nb"     data-p="1">02</button>
+  <button class="nb"     data-p="2">03</button>
+  <button class="nb"     data-p="3">04</button>
+  <button class="nb"     data-p="4">05</button>
+  <div id="nav-sep"></div>
+  <span id="nav-name">Gravity</span>
+</nav>
+
+<!-- ──────── P0 : GRAVITY ──────── -->
+<section class="page active" id="p0">
+  <canvas id="c0"></canvas>
+</section>
+
+<!-- ──────── P1 : AURORA ──────── -->
+<section class="page" id="p1">
+  <canvas id="c1"></canvas>
+  <div id="p1-ui">
+    <h1>LOADING</h1>
+    <div id="p1-pct">00%</div>
+  </div>
+</section>
+
+<!-- ──────── P2 : TERMINAL ──────── -->
+<section class="page" id="p2">
+  <canvas id="c2"></canvas>
+</section>
+
+<!-- ──────── P3 : NEURAL WEB ──────── -->
+<section class="page" id="p3">
+  <canvas id="c3"></canvas>
+</section>
+
+<!-- ──────── P4 : KINETIC TYPE ──────── -->
+<section class="page" id="p4">
+  <div id="kin-word"></div>
+  <div id="kin-hint">← move your cursor →</div>
+</section>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+//  GLOBALS
+// ═══════════════════════════════════════════════════════════════
+const mouse = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+const cursorEl = document.getElementById('cursor');
+let dpr = window.devicePixelRatio || 1;
+
+window.addEventListener('mousemove', e => {
+  mouse.x = e.clientX;
+  mouse.y = e.clientY;
+  cursorEl.style.left = e.clientX + 'px';
+  cursorEl.style.top  = e.clientY + 'px';
+});
+window.addEventListener('touchmove', e => {
+  mouse.x = e.touches[0].clientX;
+  mouse.y = e.touches[0].clientY;
+}, { passive: true });
+window.addEventListener('touchstart', e => {
+  mouse.x = e.touches[0].clientX;
+  mouse.y = e.touches[0].clientY;
+}, { passive: true });
+
+// ═══════════════════════════════════════════════════════════════
+//  PAGE MANAGER
+// ═══════════════════════════════════════════════════════════════
+const PAGES  = document.querySelectorAll('.page');
+const BTNS   = document.querySelectorAll('.nb');
+const NLABEL = document.getElementById('nav-name');
+const LABELS = ['Gravity', 'Aurora', 'Terminal', 'Neural', 'Kinetic'];
+const CTRL   = {};
+let cur = 0;
+
+function goTo(n) {
+  if (n === cur) return;
+  CTRL[cur]?.stop?.();
+  PAGES[cur].classList.remove('active');
+  BTNS[cur].classList.remove('on');
+  cur = n;
+  PAGES[n].classList.add('active');
+  BTNS[n].classList.add('on');
+  NLABEL.textContent = LABELS[n];
+  setTimeout(() => CTRL[n]?.start?.(), 80);
+}
+
+BTNS.forEach(b => b.addEventListener('click', () => goTo(+b.dataset.p)));
+document.addEventListener('keydown', e => {
+  if (e.key >= '1' && e.key <= '5')                        return goTo(+e.key - 1);
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown')     return goTo((cur + 1) % 5);
+  if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')       return goTo((cur + 4) % 5);
+});
+
+// ═══════════════════════════════════════════════════════════════
+//  P0 — GRAVITY FIELD
+//  White particles spell LOADING; cursor attracts them
+// ═══════════════════════════════════════════════════════════════
+(function p0() {
+  const cv = document.getElementById('c0');
+  const cx = cv.getContext('2d');
+  let W, H, raf, parts = [];
+
+  function resize() {
+    dpr = window.devicePixelRatio || 1;
+    W = cv.width  = cv.offsetWidth  * dpr;
+    H = cv.height = cv.offsetHeight * dpr;
+  }
+
+  function sampleText(text) {
+    const oc  = document.createElement('canvas');
+    oc.width  = W; oc.height = H;
+    const ox  = oc.getContext('2d');
+    const sz  = Math.min(W * 0.135, 120 * dpr);
+    ox.font   = `900 ${sz}px Inter, "Arial Black", sans-serif`;
+    ox.textAlign    = 'center';
+    ox.textBaseline = 'middle';
+    ox.fillStyle    = '#fff';
+    ox.fillText(text, W / 2, H / 2);
+    const { data } = ox.getImageData(0, 0, W, H);
+    const pts = [];
+    const step = 6;
+    for (let y = 0; y < H; y += step)
+      for (let x = 0; x < W; x += step)
+        if (data[(y * W + x) * 4 + 3] > 128) pts.push([x, y]);
+    return pts;
+  }
+
+  class Particle {
+    constructor(tx, ty) {
+      this.tx = tx; this.ty = ty;
+      this.x  = Math.random() * W;
+      this.y  = Math.random() * H;
+      this.vx = 0; this.vy = 0;
+      this.r  = (Math.random() * 1.1 + 0.6) * dpr;
+    }
+    tick() {
+      const mx = mouse.x * dpr, my = mouse.y * dpr;
+      // spring home
+      this.vx += (this.tx - this.x) * 0.042;
+      this.vy += (this.ty - this.y) * 0.042;
+      // mouse gravity — attract
+      const dx = mx - this.x, dy = my - this.y;
+      const d  = Math.sqrt(dx * dx + dy * dy) + 1;
+      const f  = Math.min(8500 / (d * d), 3.5);
+      this.vx += (dx / d) * f;
+      this.vy += (dy / d) * f;
+      this.vx *= 0.87; this.vy *= 0.87;
+      this.x  += this.vx;
+      this.y  += this.vy;
+    }
+    draw() {
+      cx.beginPath();
+      cx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
+      cx.fill();
+    }
+  }
+
+  async function init() {
+    resize();
+    await document.fonts.ready;
+    if (cur !== 0) return;
+    const all  = sampleText('LOADING');
+    const keep = Math.min(all.length, 680);
+    const step = Math.max(1, Math.floor(all.length / keep));
+    parts = all.filter((_, i) => i % step === 0).map(([x, y]) => new Particle(x, y));
+  }
+
+  function frame() {
+    cx.clearRect(0, 0, W, H);
+    // soft cursor glow
+    const mx = mouse.x * dpr, my = mouse.y * dpr;
+    const g  = cx.createRadialGradient(mx, my, 0, mx, my, 260 * dpr);
+    g.addColorStop(0, 'rgba(255,240,160,.04)');
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    cx.fillStyle = g;
+    cx.fillRect(0, 0, W, H);
+    cx.fillStyle = '#fff';
+    parts.forEach(p => { p.tick(); p.draw(); });
+    raf = requestAnimationFrame(frame);
+  }
+
+  window.addEventListener('resize', () => { if (cur === 0) init(); });
+
+  CTRL[0] = {
+    start() {
+      init().then(() => {
+        if (cur === 0) { cancelAnimationFrame(raf); raf = requestAnimationFrame(frame); }
+      });
+    },
+    stop() { cancelAnimationFrame(raf); }
+  };
+  CTRL[0].start();
+})();
+
+// ═══════════════════════════════════════════════════════════════
+//  P1 — AURORA
+//  Radial-gradient blobs with 'screen' blending follow cursor
+// ═══════════════════════════════════════════════════════════════
+(function p1() {
+  const cv    = document.getElementById('c1');
+  const cx    = cv.getContext('2d');
+  const pctEl = document.getElementById('p1-pct');
+  let W, H, raf, blobs = [], pct = 0;
+
+  const PALETTE = [
+    [120, 30, 230],
+    [55,  10, 190],
+    [10,  70, 230],
+    [180, 20, 210],
+    [15, 110, 250],
+    [100, 15, 250],
+    [0,  150, 210],
+  ];
+
+  function resize() {
+    W = cv.width  = cv.offsetWidth  * dpr;
+    H = cv.height = cv.offsetHeight * dpr;
+  }
+
+  function init() {
+    resize(); pct = 0;
+    blobs = PALETTE.map(col => ({
+      x   : (0.15 + Math.random() * 0.7) * W,
+      y   : (0.15 + Math.random() * 0.7) * H,
+      r   : (0.24 + Math.random() * 0.2) * Math.min(W, H),
+      phase: Math.random() * Math.PI * 2,
+      spd : 0.25 + Math.random() * 0.55,
+      col,
+    }));
+    blobs.push({ x: mouse.x * dpr, y: mouse.y * dpr,
+                 r: 0.21 * Math.min(W, H), isMouse: true, col: [200, 80, 255] });
+  }
+
+  function frame(ts) {
+    cx.clearRect(0, 0, W, H);
+    cx.globalCompositeOperation = 'screen';
+    blobs.forEach(b => {
+      if (b.isMouse) {
+        b.x += (mouse.x * dpr - b.x) * 0.065;
+        b.y += (mouse.y * dpr - b.y) * 0.065;
+      } else {
+        const ti = ts * 0.00028 * b.spd;
+        b.x += Math.sin(ti + b.phase)        * 0.75 * dpr;
+        b.y += Math.cos(ti * 0.6 + b.phase)  * 0.6  * dpr;
+        if (b.x < -b.r)    b.x = W + b.r;
+        if (b.x > W + b.r) b.x = -b.r;
+        if (b.y < -b.r)    b.y = H + b.r;
+        if (b.y > H + b.r) b.y = -b.r;
+      }
+      const [r, g, bl] = b.col;
+      const gr = cx.createRadialGradient(b.x, b.y, 0, b.x, b.y, b.r);
+      gr.addColorStop(0,   `rgba(${r},${g},${bl},.48)`);
+      gr.addColorStop(0.4, `rgba(${r},${g},${bl},.16)`);
+      gr.addColorStop(1,   `rgba(${r},${g},${bl},0)`);
+      cx.fillStyle = gr;
+      cx.beginPath();
+      cx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+      cx.fill();
+    });
+    cx.globalCompositeOperation = 'source-over';
+    pct = Math.min(100, pct + 0.17);
+    pctEl.textContent = String(Math.floor(pct)).padStart(2, '0') + '%';
+    raf = requestAnimationFrame(frame);
+  }
+
+  window.addEventListener('resize', () => { if (cur === 1) init(); });
+  CTRL[1] = {
+    start() { init(); raf = requestAnimationFrame(frame); },
+    stop()  { cancelAnimationFrame(raf); }
+  };
+})();
+
+// ═══════════════════════════════════════════════════════════════
+//  P2 — MATRIX TERMINAL
+//  Classic column rain + glitch text panel + progress bar
+// ═══════════════════════════════════════════════════════════════
+(function p2() {
+  const cv = document.getElementById('c2');
+  const cx = cv.getContext('2d');
+  let W, H, raf, drops = [], progress = 0, tick = 0;
+
+  const FZ    = 13;
+  const CHARS = '0123456789ABCDEF><@#:.';
+  const GLCH  = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*';
+  const STATUS_LINES = [
+    '> INIT CORE MODULES         [OK]',
+    '> ALLOCATE MEMORY BUFFERS   [OK]',
+    '> SECURE CHANNEL HANDSHAKE  [OK]',
+    '> LOAD ASSET MANIFESTS   [··· ]',
+    '> COMPILE SHADER PROGRAMS   [OK]',
+    '> VERIFY INTEGRITY HASH     [OK]',
+  ];
+
+  function resize() {
+    W = cv.width  = cv.offsetWidth  * dpr;
+    H = cv.height = cv.offsetHeight * dpr;
+    const cols = Math.ceil(W / (FZ * dpr));
+    drops = Array.from({ length: cols }, () => Math.random() * -80);
+  }
+
+  function rnd(s) { return s[Math.floor(Math.random() * s.length)]; }
+  function glitch(str, amt) {
+    return [...str].map(c => Math.random() < amt ? rnd(GLCH) : c).join('');
+  }
+
+  function frame(ts) {
+    tick++;
+    const fz = FZ * dpr;
+    cx.fillStyle = 'rgba(1,12,1,.12)';
+    cx.fillRect(0, 0, W, H);
+    cx.font = `${fz}px "Space Mono", monospace`;
+
+    // rain columns
+    drops.forEach((y, i) => {
+      const head  = y > 0 && y < 2.5;
+      const alpha = head ? 1 : 0.28 + Math.random() * 0.18;
+      const green = head ? 255 : 100 + Math.floor(Math.random() * 90);
+      cx.fillStyle = `rgba(0,${green},45,${alpha})`;
+      cx.fillText(rnd(CHARS), i * fz, y * fz);
+      if (y * fz > H && Math.random() > 0.976) drops[i] = 0;
+      drops[i] += 0.52;
+    });
+
+    // ── central panel ──
+    const CX = W / 2, CY = H / 2;
+    const PW = Math.min(500 * dpr, W * 0.78);
+    const PH = 160 * dpr;
+    const px = CX - PW / 2, py = CY - PH / 2;
+
+    cx.fillStyle = 'rgba(1,14,1,.9)';
+    cx.fillRect(px, py, PW, PH);
+
+    // double border
+    cx.strokeStyle = 'rgba(0,200,55,.25)';
+    cx.lineWidth   = dpr;
+    cx.strokeRect(px + 3*dpr, py + 3*dpr, PW - 6*dpr, PH - 6*dpr);
+    cx.strokeStyle = 'rgba(0,255,80,.45)';
+    cx.lineWidth   = dpr;
+    cx.strokeRect(px + dpr, py + dpr, PW - 2*dpr, PH - 2*dpr);
+
+    // corner brackets
+    const bL = 12 * dpr;
+    cx.strokeStyle = 'rgba(0,255,80,.8)';
+    cx.lineWidth   = 2 * dpr;
+    [[px, py, 1, 1],[px+PW, py, -1, 1],[px, py+PH, 1, -1],[px+PW, py+PH, -1, -1]]
+      .forEach(([x, y, sx, sy]) => {
+        cx.beginPath();
+        cx.moveTo(x + sx * bL, y);
+        cx.lineTo(x, y);
+        cx.lineTo(x, y + sy * bL);
+        cx.stroke();
+      });
+
+    // glitch heading
+    const gAmt = Math.sin(ts * .0028) * .06 + (Math.random() < .04 ? .48 : 0);
+    cx.font          = `bold ${21 * dpr}px "Space Mono", monospace`;
+    cx.fillStyle     = '#00ff55';
+    cx.textAlign     = 'center';
+    cx.textBaseline  = 'middle';
+    cx.fillText(glitch('SYS :: LOADING', gAmt), CX, py + 28 * dpr);
+
+    // progress bar
+    progress = Math.min(100, progress + 0.22);
+    const BW = PW - 60 * dpr, BH = 3.5 * dpr;
+    const bx = CX - BW / 2, by = py + 58 * dpr;
+    cx.fillStyle = 'rgba(0,255,85,.1)';
+    cx.fillRect(bx, by, BW, BH);
+    cx.fillStyle = '#00ff55';
+    cx.fillRect(bx, by, BW * progress / 100, BH);
+    // glow tip
+    if (progress < 100) {
+      const tip = bx + BW * progress / 100;
+      const tg  = cx.createRadialGradient(tip, by + BH/2, 0, tip, by + BH/2, 8 * dpr);
+      tg.addColorStop(0, 'rgba(0,255,100,.7)');
+      tg.addColorStop(1, 'rgba(0,255,100,0)');
+      cx.fillStyle = tg;
+      cx.fillRect(tip - 8*dpr, by - 4*dpr, 16*dpr, BH + 8*dpr);
+    }
+
+    // percentage + bar chars
+    const pStr = String(Math.floor(progress)).padStart(3, '0');
+    const bars = Math.floor(progress / 5);
+    const barStr = '█'.repeat(bars) + '░'.repeat(20 - bars);
+    cx.font      = `${9.5 * dpr}px "Space Mono", monospace`;
+    cx.fillStyle = 'rgba(0,255,85,.5)';
+    cx.fillText(`${pStr}%  ${barStr}`, CX, by + 18 * dpr);
+
+    // status lines (fade in one by one as progress climbs)
+    cx.textAlign     = 'left';
+    cx.textBaseline  = 'middle';
+    const visibleLines = Math.floor(progress / (100 / STATUS_LINES.length));
+    STATUS_LINES.slice(0, visibleLines + 1).forEach((line, i) => {
+      const lineY = py + 95 * dpr + i * 12 * dpr;
+      if (lineY > py + PH - 6 * dpr) return;
+      const alpha = i < visibleLines ? 0.38 : Math.min(1, (progress % (100 / STATUS_LINES.length)) / 5) * 0.38;
+      cx.fillStyle = `rgba(0,200,60,${alpha})`;
+      cx.font      = `${8.5 * dpr}px "Space Mono", monospace`;
+      cx.fillText(line, px + 18 * dpr, lineY);
+    });
+
+    cx.textAlign = 'left';
+    raf = requestAnimationFrame(frame);
+  }
+
+  window.addEventListener('resize', () => { if (cur === 2) resize(); });
+  CTRL[2] = {
+    start() { resize(); progress = 0; raf = requestAnimationFrame(frame); },
+    stop()  { cancelAnimationFrame(raf); }
+  };
+})();
+
+// ═══════════════════════════════════════════════════════════════
+//  P3 — NEURAL WEB
+//  Particle mesh; cursor repels nodes; connections glow near cursor
+// ═══════════════════════════════════════════════════════════════
+(function p3() {
+  const cv = document.getElementById('c3');
+  const cx = cv.getContext('2d');
+  let W, H, raf, nodes = [];
+
+  function resize() {
+    W = cv.width  = cv.offsetWidth  * dpr;
+    H = cv.height = cv.offsetHeight * dpr;
+  }
+
+  class Node {
+    constructor() {
+      this.x  = Math.random() * W;
+      this.y  = Math.random() * H;
+      this.vx = (Math.random() - .5) * .85;
+      this.vy = (Math.random() - .5) * .85;
+      this.r  = (Math.random() * 1.5 + 0.8) * dpr;
+    }
+    tick() {
+      const mx = mouse.x * dpr, my = mouse.y * dpr;
+      const dx = this.x - mx, dy = this.y - my;
+      const d  = Math.sqrt(dx*dx + dy*dy) + 1;
+      const RR = 120 * dpr;
+      if (d < RR) {
+        const f = (RR - d) / RR;
+        this.vx += (dx / d) * f * 2.4;
+        this.vy += (dy / d) * f * 2.4;
+      }
+      this.vx *= 0.963; this.vy *= 0.963;
+      this.x  += this.vx; this.y  += this.vy;
+      if (this.x < 0)  { this.x = 0;  this.vx *= -1; }
+      if (this.x > W)  { this.x = W;  this.vx *= -1; }
+      if (this.y < 0)  { this.y = 0;  this.vy *= -1; }
+      if (this.y > H)  { this.y = H;  this.vy *= -1; }
+    }
+    draw() {
+      cx.beginPath();
+      cx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
+      cx.fill();
+    }
+  }
+
+  function init() {
+    resize();
+    const N = Math.min(150, Math.floor(W * H / 9500));
+    nodes = Array.from({ length: N }, () => new Node());
+  }
+
+  function frame() {
+    cx.clearRect(0, 0, W, H);
+    const MAXD = 140 * dpr;
+    const mx = mouse.x * dpr, my = mouse.y * dpr;
+
+    // edges
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i + 1; j < nodes.length; j++) {
+        const dx = nodes[i].x - nodes[j].x;
+        const dy = nodes[i].y - nodes[j].y;
+        const d  = Math.sqrt(dx*dx + dy*dy);
+        if (d > MAXD) continue;
+        const t    = 1 - d / MAXD;
+        const midX = (nodes[i].x + nodes[j].x) / 2;
+        const midY = (nodes[i].y + nodes[j].y) / 2;
+        const md   = Math.sqrt((midX-mx)**2 + (midY-my)**2);
+        const glow = Math.max(0, 1 - md / (175 * dpr));
+        const alpha = t * 0.32 + glow * 0.5;
+        const rr  = Math.floor(70 + glow * 140);
+        const gg  = Math.floor(120 + glow * 70);
+        cx.strokeStyle = `rgba(${rr},${gg},255,${alpha.toFixed(2)})`;
+        cx.lineWidth   = dpr * (0.5 + glow * 1.3);
+        cx.beginPath();
+        cx.moveTo(nodes[i].x, nodes[i].y);
+        cx.lineTo(nodes[j].x, nodes[j].y);
+        cx.stroke();
+      }
+    }
+
+    // nodes
+    cx.fillStyle = 'rgba(155,190,255,.65)';
+    nodes.forEach(n => { n.tick(); n.draw(); });
+
+    // faint watermark
+    cx.font          = `100 ${Math.min(W * 0.09, 70 * dpr)}px Inter, sans-serif`;
+    cx.fillStyle     = 'rgba(120,170,255,.06)';
+    cx.textAlign     = 'center';
+    cx.textBaseline  = 'middle';
+    cx.fillText('LOADING', W / 2, H / 2);
+    cx.textAlign = 'left';
+
+    raf = requestAnimationFrame(frame);
+  }
+
+  window.addEventListener('resize', () => { if (cur === 3) init(); });
+  CTRL[3] = {
+    start() { init(); raf = requestAnimationFrame(frame); },
+    stop()  { cancelAnimationFrame(raf); }
+  };
+})();
+
+// ═══════════════════════════════════════════════════════════════
+//  P4 — KINETIC TYPOGRAPHY
+//  Each letter warps (Y, scale, rotate) based on cursor position
+// ═══════════════════════════════════════════════════════════════
+(function p4() {
+  const container = document.getElementById('kin-word');
+  const WORD = 'LOADING';
+  let spans = [], raf, t = 0;
+
+  function init() {
+    container.innerHTML = '';
+    spans = [...WORD].map(ch => {
+      const s = document.createElement('span');
+      s.textContent = ch;
+      container.appendChild(s);
+      return s;
+    });
+  }
+
+  function frame() {
+    t += 0.016;
+    const N   = WORD.length;
+    const mxN = (mouse.x / window.innerWidth  - 0.5) * 2; // −1 … 1
+    const myN = (mouse.y / window.innerHeight - 0.5) * 2;
+
+    spans.forEach((s, i) => {
+      const pos = (i / (N - 1) - 0.5) * 2; // −1 … 1 across word
+
+      // vertical: sine wave + cursor
+      const waveY   = Math.sin(t * 1.08 + i * 0.62) * 11;
+      const cursorY = myN * (1 - Math.abs(pos - mxN) * 0.45) * 48;
+      const ty      = waveY + cursorY;
+
+      // horizontal nudge
+      const tx = (mxN - pos) * 16;
+
+      // scale
+      const dist  = Math.abs(pos - mxN);
+      const scale = 1 + Math.max(0, 0.62 - dist) * 0.38;
+
+      // rotation
+      const rot = mxN * pos * 13 + Math.sin(t * 0.75 + i) * 1.8;
+
+      // color: dark near cursor, lighter far away
+      const lum = Math.round(Math.max(10, 12 + dist * 110));
+      s.style.transform = `translateY(${ty}px) translateX(${tx}px) scale(${scale}) rotate(${rot}deg)`;
+      s.style.color     = `rgb(${lum},${lum},${lum})`;
+
+      // blur on extreme vertical displacement
+      const blurPx = Math.max(0, Math.abs(ty) - 20) * 0.13;
+      s.style.filter = blurPx > 0.2 ? `blur(${blurPx.toFixed(2)}px)` : '';
+    });
+
+    raf = requestAnimationFrame(frame);
+  }
+
+  CTRL[4] = {
+    start() { init(); raf = requestAnimationFrame(frame); },
+    stop()  { cancelAnimationFrame(raf); }
+  };
+})();
+
+// ── boot ──
+NLABEL.textContent = LABELS[0];
+</script>
+</body>
+</html>
